@@ -1,0 +1,52 @@
+===============
+VM Density test
+===============
+
+The idea is to boot as many VMs as possible (not all at once) and make sure they are properly wired and have access
+to the external network. External access will be checked by the external server (simple HTTP which logs connections)
+to which VMs will send corresponding requests upon spawning. The output of these tests will be a defined number of VMs
+which could be deployed without issues with cloud operability, etc.
+
+How to setup
+------------
+
+Run HTTP Server so it is accessible from the external network of the test cluster.
+
+Just execute the following command:
+
+ python server.py -p <PORT> -l <LOG_DIR>
+
+On its start the server creates a log file with name in the format "instance_<timestamp>.txt".
+It is used for logging incoming connections from provisioned VMs which send instance ips to this server via
+POST requests. Instances also report a number of attempts it took to get an ip address from metadata server and
+send connect to the HTTP server respectively.
+
+*NOTE:* If the server is restarted, it will create a new "instance_<timestamp>.txt" file with new timestamp.
+
+
+OpenStack post-configuration
+----------------------------
+
+Unset qoutas by running:
+
+ bash utils/unset_quotas.sh
+
+
+Using Heat
+----------
+
+Here are instructions how to run existing Heat template:
+
+1. Define number of compute nodes you have in the cluster. Let's say this number is NUM_COMPUTES.
+2. Make sure that IMAGE_ID and FLAVOR exist.
+3. Run HTTP server somewhere and get its IP address = SERVER_ADDRESS.
+4. Run heat stack using "instance_metadata.hot" file is as follows:
+
+heat stack-create -f instance_metadata.hot -P "image=IMAGE_ID;flavor=FLAVOR;instance_count=NUM_COMPUTES;server_endpoint=SERVER_ADDRESS" STACK_NAME
+
+*NOTE:* Each heat stack creates a new network, subnet, router, server groups and security group with rules, hence the
+need of unlimited quotas.
+
+5. Repeat step 4 as many times as you need.
+6. Each step monitor "instances_<timestamp>.txt" using wc -l to validate that all instances are booted and connected
+to the HTTP server.

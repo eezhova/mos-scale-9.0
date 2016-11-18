@@ -1,0 +1,65 @@
+=================
+VM integrity test
+=================
+
+The idea of this test is to create a group of resources and that it stays persistent no matter
+what other operations are performed on the environment (resources creation/deletion, heavy workloads, etc.).
+
+Test scenario
+-------------
+
+Create 20 instances in two server groups `server-group-floating` and `server-group-non-floating` in proportion 10:10,
+with each server group having the anti-affinity policy. Instances from different server groups are located in different
+subnets plugged into a router. Instances from `server-group-floating` have assigned floating ips while instances
+from `server-group-non-floating` have only fixed ips.
+
+For each of the instances the following connectivity checks are made:
+1. SSH into an instance.
+2. Ping and external resource (eg. 8.8.8.8)
+3. Ping other VMs (by fixed or floating ips)
+
+Lists of ips to ping from VM are formed in a way to check all possible combinations with minimum redundancy.
+
+Installation
+------------
+
+Clone mirantis-networking repository:
+
+git clone ssh://eezhova@gerrit.mirantis.com:29418/mirantis-networking/mirantis-networking
+
+Create a virtualenv and install integrity_check package:
+
+cd mos-scale-9.0
+virtualenv --system-site-packages integ
+. integ/bin/activate
+pip install -U -e .
+
+# For MOS 8.0
+pip install keystoneauth1
+
+Setup
+-----
+
+Create control group resources using Heat
+
+heat stack-create -f integrity_check/integrity_vm.hot -P "image=<image_id>;flavor=m1.micro;instance_count_floating=10;instance_count_non_floating=10" integrity_stack
+
+Assign floating ips to VMs from `nova_server_group_floating` group
+
+assign_floatingips --sg-floating nova_server_group_floating
+
+Running connectivity checks
+---------------------------
+
+connectivity_check -s ~/ips.json
+
+Where ~/ips.json is a path to file used to store instances' IPs.
+
+*NOTE:* Make sure to run this check only on controller with qdhcp namespace of integrity_network.
+
+Cleanup
+-------
+
+assign_floatingips --sg-floating nova_server_group_floating --cleanup
+heat stack-delete integrity_stack
+rm ~/ips.json
